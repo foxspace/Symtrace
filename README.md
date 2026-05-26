@@ -1,6 +1,6 @@
 # Symtrace
 
-Track symptoms in seconds. Bring a clear timeline to your doctor.
+Track chronical symptoms in seconds. Bring a clear timeline to your doctor.
 
 iOS MVP — SwiftUI + SwiftData, local-first, no backend.
 
