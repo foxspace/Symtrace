@@ -1,0 +1,37 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Xcode build artifacts — never commit these
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+
+# Xcode per-user scheme settings (contain local paths / window state)
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+
+# Resolved Swift package cache
+.build/
+*.resolved
+
+# Instruments / profiling
+*.trace
+
+# CocoaPods (not used, but just in case)
+Pods/
+Podfile.lock
+
+# Fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output
+
+# Credentials / secrets — never commit
+*.p12
+*.cer
+*.mobileprovision
+AuthKey_*.p8
