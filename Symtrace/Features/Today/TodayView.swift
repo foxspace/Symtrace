@@ -40,19 +40,7 @@ struct TodayView: View {
             store: store,
             onQuickAction: load
         )
-        // Today is a leaf tab — no pushable destinations, no toolbar
-        // items. Hiding the nav bar reclaims ~50pt for actual logging
-        // content. Date context lives in the safe-area inset below.
-        .toolbar(.hidden, for: .navigationBar)
-        .safeAreaInset(edge: .top, spacing: 0) {
-            Text(Date().formatted(.dateTime.weekday(.wide).month(.wide).day()))
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.top, 8)
-                .padding(.bottom, 4)
-                .background(.bar)
-        }
+        .navigationTitle("Today")
         .onAppear(perform: load)
     }
 

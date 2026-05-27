@@ -39,7 +39,7 @@ struct SettingsView: View {
 
             Section("About") {
                 LabeledContent("Version", value: appVersion)
-                LabeledContent("Created by", value: "Mason × AI")
+                LabeledContent("Created by", value: "Foxspace")
             }
         }
         .navigationTitle("Settings")

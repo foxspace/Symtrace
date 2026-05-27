@@ -29,6 +29,8 @@ struct EntryForm: View {
     let store: DailyEntryStore
     let onQuickAction: () -> Void
 
+    @State private var pendingQuickAction: QuickAction?
+
     var body: some View {
         Form {
             if showsQuickActions {
@@ -41,6 +43,23 @@ struct EntryForm: View {
                 triggersSection
             }
             noteSection
+        }
+        .confirmationDialog(
+            pendingQuickAction?.confirmTitle ?? "",
+            isPresented: Binding(
+                get: { pendingQuickAction != nil },
+                set: { if !$0 { pendingQuickAction = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: pendingQuickAction
+        ) { action in
+            Button(action.confirmButton, role: .destructive) {
+                perform(action)
+                pendingQuickAction = nil
+            }
+            Button("Cancel", role: .cancel) { pendingQuickAction = nil }
+        } message: { action in
+            Text(action.confirmMessage)
         }
     }
 
@@ -66,15 +85,14 @@ struct EntryForm: View {
     // MARK: - Sections
 
     private var quickActions: some View {
-        Section {
+        Section("Quick log") {
             HStack(spacing: 8) {
                 // "Same as yesterday" is always shown so the layout doesn't
                 // shift on Day 1 vs. Day 2+ and so users learn the feature
                 // exists from the start. Disabled when there's nothing
                 // meaningful to copy from yesterday.
                 Button {
-                    do { try store.copyYesterdayToToday(); onQuickAction() }
-                    catch { assertionFailure("copyYesterday failed: \(error)") }
+                    request(.copyYesterday)
                 } label: {
                     Label("Same as yesterday", systemImage: "arrow.uturn.backward")
                         .frame(maxWidth: .infinity)
@@ -83,8 +101,7 @@ struct EntryForm: View {
                 .disabled(!hasYesterday)
 
                 Button {
-                    do { try store.quickLogFeelingFine(); onQuickAction() }
-                    catch { assertionFailure("quickLogFeelingFine failed: \(error)") }
+                    request(.feelingFine)
                 } label: {
                     Label("Feeling fine", systemImage: "sun.max")
                         .frame(maxWidth: .infinity)
@@ -96,6 +113,32 @@ struct EntryForm: View {
             // iPhone, which looks broken.
             .labelStyle(QuickActionLabelStyle())
             .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
+        }
+    }
+
+    // MARK: - Quick actions
+
+    /// Run the shortcut immediately on an empty entry — that's the whole point
+    /// of a one-tap accelerator. But both shortcuts overwrite/clear existing
+    /// data, so when the day already has content, confirm first to avoid
+    /// silently wiping what the user just logged.
+    private func request(_ action: QuickAction) {
+        if entry?.hasContent == true {
+            pendingQuickAction = action
+        } else {
+            perform(action)
+        }
+    }
+
+    private func perform(_ action: QuickAction) {
+        do {
+            switch action {
+            case .copyYesterday: try store.copyYesterdayToToday()
+            case .feelingFine: try store.quickLogFeelingFine()
+            }
+            onQuickAction()
+        } catch {
+            assertionFailure("\(action) failed: \(error)")
         }
     }
 
@@ -252,6 +295,45 @@ struct EntryForm: View {
     private func sleepLabel(for hours: Double?) -> String {
         guard let hours else { return "—" }
         return String(format: "%.1f h", hours)
+    }
+}
+
+// MARK: - Quick action
+
+/// The two Today shortcuts. Both rewrite the day, so each carries the copy for
+/// the confirmation shown when it would overwrite an entry that already has data.
+private enum QuickAction: Identifiable {
+    case copyYesterday
+    case feelingFine
+
+    var id: String {
+        switch self {
+        case .copyYesterday: return "copyYesterday"
+        case .feelingFine: return "feelingFine"
+        }
+    }
+
+    var confirmTitle: String {
+        switch self {
+        case .copyYesterday: return "Replace today's entry?"
+        case .feelingFine: return "Clear today's symptoms?"
+        }
+    }
+
+    var confirmMessage: String {
+        switch self {
+        case .copyYesterday:
+            return "This overwrites today's rating, sleep, symptoms, and triggers with yesterday's."
+        case .feelingFine:
+            return "This removes every symptom logged today and marks the day as Good."
+        }
+    }
+
+    var confirmButton: String {
+        switch self {
+        case .copyYesterday: return "Replace"
+        case .feelingFine: return "Mark as fine"
+        }
     }
 }
 
