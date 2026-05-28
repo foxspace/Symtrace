@@ -30,6 +30,7 @@ struct EntryForm: View {
     let onQuickAction: () -> Void
 
     @State private var pendingQuickAction: QuickAction?
+    @State private var showingDescribeDay = false
 
     var body: some View {
         Form {
@@ -61,6 +62,15 @@ struct EntryForm: View {
         } message: { action in
             Text(action.confirmMessage)
         }
+        .sheet(isPresented: $showingDescribeDay) {
+            DescribeYourDaySheet(
+                initialText: entry?.note ?? "",
+                symptoms: activeSymptoms,
+                triggers: activeTriggers,
+                currentEntry: entry,
+                onSave: saveDescribeDay
+            )
+        }
     }
 
     // MARK: - Materialization
@@ -86,32 +96,46 @@ struct EntryForm: View {
 
     private var quickActions: some View {
         Section("Quick log") {
-            HStack(spacing: 8) {
-                // "Same as yesterday" is always shown so the layout doesn't
-                // shift on Day 1 vs. Day 2+ and so users learn the feature
-                // exists from the start. Disabled when there's nothing
-                // meaningful to copy from yesterday.
+            VStack(spacing: 8) {
+                // Row 1: typing-first logging path. Leads the section because
+                // it's the richest, most flexible way to log — a Smart-fill
+                // input method, not just a shortcut. Spans full width.
                 Button {
-                    request(.copyYesterday)
+                    showingDescribeDay = true
                 } label: {
-                    Label("Same as yesterday", systemImage: "arrow.uturn.backward")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(!hasYesterday)
-
-                Button {
-                    request(.feelingFine)
-                } label: {
-                    Label("Feeling fine", systemImage: "sun.max")
+                    Label("Describe your day", systemImage: "sparkles")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
+                .controlSize(.large)
+
+                // Row 2: the two one-tap shortcuts. "Same as yesterday" is
+                // always shown so the layout doesn't shift on Day 1 vs. Day 2+
+                // and so users learn the feature exists from the start.
+                // Disabled when there's nothing meaningful to copy from
+                // yesterday.
+                HStack(spacing: 8) {
+                    Button {
+                        request(.copyYesterday)
+                    } label: {
+                        Label("Same as yesterday", systemImage: "arrow.uturn.backward")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .disabled(!hasYesterday)
+
+                    Button {
+                        request(.feelingFine)
+                    } label: {
+                        Label("Feeling fine", systemImage: "sun.max")
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+                .buttonStyle(.bordered)
+                // Stack icon-on-top so longer labels like "Same as yesterday"
+                // fit on one line — horizontal `.titleAndIcon` wraps at
+                // half-width on iPhone, which looks broken.
+                .labelStyle(QuickActionLabelStyle())
             }
-            // Stack icon-on-top so longer labels like "Same as yesterday" fit
-            // on one line — horizontal `.titleAndIcon` wraps at half-width on
-            // iPhone, which looks broken.
-            .labelStyle(QuickActionLabelStyle())
             .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
         }
     }
@@ -200,6 +224,9 @@ struct EntryForm: View {
     }
 
     private var noteSection: some View {
+        // Reverted to a plain journal field. Smart-fill moved to the "Describe
+        // your day" Quick log path so the note field stays a comment-style
+        // surface — typing here doesn't promise to populate other fields.
         Section("Note (optional)") {
             TextField(
                 "Anything else worth jotting down?",
@@ -208,6 +235,48 @@ struct EntryForm: View {
             )
             .lineLimit(1...4)
         }
+    }
+
+    // MARK: - Describe your day apply
+
+    /// Single transaction commit from `DescribeYourDaySheet`. Writes the typed
+    /// text as the day's note and applies every confirmed suggestion through
+    /// `DailyEntryStore` (so lazy-creation + delete-on-zero rules apply
+    /// automatically — same path manual edits use).
+    ///
+    /// Empty `suggestions` means the user tapped Save without parsing, so we
+    /// only update the note. We bail before materializing if there's truly
+    /// nothing to do — avoids creating an empty `DailyEntry` on a Cancel-then-
+    /// reopen cycle.
+    private func saveDescribeDay(text: String, suggestions: [ParsedSuggestion]) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let newNoteValue: String? = trimmed.isEmpty ? nil : text
+        let noteChanged = entry?.note != newNoteValue
+        let hasSuggestions = !suggestions.isEmpty
+
+        guard noteChanged || hasSuggestions else { return }
+
+        let e = materializeEntry()
+
+        if noteChanged {
+            e.note = newNoteValue
+        }
+
+        for suggestion in suggestions {
+            switch suggestion {
+            case .symptom(let symptom, _, let value):
+                store.setSymptomSeverity(value, for: symptom, on: e)
+            case .trigger(let trigger, _, let value):
+                store.setTriggerValue(value, for: trigger, on: e)
+            case .sleep(_, let value):
+                e.sleepHours = value
+            case .dayRating(_, let value):
+                e.dayRating = value
+            }
+        }
+
+        e.updatedAt = Date()
+        store.save()
     }
 
     // MARK: - Bindings
